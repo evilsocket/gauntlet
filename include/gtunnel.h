@@ -24,8 +24,14 @@
 #include <dlfcn.h>
 
 #define G_MODULE_EXT ".so"
-
 #define G_VALID_IO_STATUS(s) (s == NET_OK || s == NET_MOREDATA)
+
+typedef void (*g_init_handler_t)();
+typedef void (*g_onincoming_connection_handler_t)( int );
+typedef void (*g_ontunnelingready_handler_t)( int, int );
+typedef void (*g_onincoming_payload_handler_t)( int, unsigned char *, int *);
+typedef void (*g_onoutgoing_payload_handler_t)( int, unsigned char *, int *);
+typedef void (*g_dispose_handler_t)();
 
 class GTunnel {
 	protected :
@@ -38,6 +44,13 @@ class GTunnel {
 		
 		static void *onIncomingConnection_dispatcher(void *ptr);
 		static void *onTunnelingReady_dispatcher(void *ptr);
+		
+		g_init_handler_t				  m_init_handler;
+		g_onincoming_connection_handler_t m_onincoming_connection_handler;
+		g_ontunnelingready_handler_t	  m_ontunnelingready_handler;
+		g_onincoming_payload_handler_t	  m_onincoming_payload_handler;
+		g_onoutgoing_payload_handler_t	  m_onoutgoing_payload_handler;
+		g_dispose_handler_t				  m_dispose_handler;
 		
 	public :
 	

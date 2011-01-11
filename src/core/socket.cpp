@@ -54,6 +54,10 @@ Socket::~Socket(){
 	::close( m_sd );
 }
 
+int Socket::sd(){
+	return m_sd;
+}
+
 void Socket::setAddress( unsigned long address ){
 	struct in_addr in_address;
 

@@ -41,6 +41,8 @@ class Socket {
 		
 		~Socket();
 		
+		int   sd();
+		
 		void  setAddress( unsigned long address );
 		char *getAddress();
 		

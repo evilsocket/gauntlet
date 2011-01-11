@@ -3,7 +3,7 @@ CFLAGS= -w $(INC_PATHS)
 FLAGS= -L/opt/local/lib -lpthread
 
 all: 
-	gcc -Wall -fPIC -c httptunnel.cpp
-	gcc -shared -o ../httptunnel.so httptunnel.o
+	g++ -w -fPIC -c httptunnel.cpp
+	g++ -shared -o ../httptunnel.so httptunnel.o
 clean:
 	rm -rf ../httptunnel.so

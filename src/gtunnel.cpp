@@ -28,12 +28,26 @@ g_socket_tunnel_t;
 GTunnel::GTunnel( char *modulename ) : m_name(modulename), m_module(NULL) {
 	string libname = m_name + G_MODULE_EXT,
 		   cfgname = m_name + ".conf";
-		   
+	
+	m_init_handler 					= NULL;
+	m_onincoming_connection_handler = NULL;
+	m_ontunnelingready_handler		= NULL;
+	m_onincoming_payload_handler	= NULL;
+	m_onoutgoing_payload_handler	= NULL;
+	m_dispose_handler				= NULL;
+	
 	m_module = dlopen( libname.c_str(), RTLD_NOW );
 	if( !m_module ){
 		g_log_error( "Could not load gtunnel module %s .\n", libname.c_str() );
 		return;
 	}
+	
+	m_init_handler 					= (g_init_handler_t					)dlsym( m_module, "init_handler" );
+	m_onincoming_connection_handler = (g_onincoming_connection_handler_t)dlsym( m_module, "onincoming_connection_handler" );
+	m_ontunnelingready_handler		= (g_ontunnelingready_handler_t     )dlsym( m_module, "ontunnelingready_handler" );
+	m_onincoming_payload_handler	= (g_onincoming_payload_handler_t   )dlsym( m_module, "onincoming_payload_handler" );
+	m_onoutgoing_payload_handler	= (g_onoutgoing_payload_handler_t   )dlsym( m_module, "onoutgoing_payload_handler" );
+	m_dispose_handler				= (g_dispose_handler_t              )dlsym( m_module, "dispose_handler" );
 	
 	if( m_config.load( cfgname.c_str() ) != 0 ){
 		g_log_error( "Could not load '%s' module configuration file '%s' .\n", m_name.c_str(), cfgname.c_str() );
@@ -46,12 +60,16 @@ GTunnel::GTunnel( char *modulename ) : m_name(modulename), m_module(NULL) {
 							   
 	m_listener->setCustomArg(this);
 	
-	g_log_debug( "Succesfully loaded module '%s' and its configuration .\n", m_name.c_str() );
+	g_log_info( "Succesfully loaded module '%s' and its configuration .\n", m_name.c_str() );
+	
+	if( m_init_handler ) m_init_handler();
 }
 
 GTunnel::~GTunnel(){
 	dlclose(m_module);
 	delete m_listener;
+	
+	if( m_dispose_handler ) m_dispose_handler();
 }
 
 void *GTunnel::onIncomingConnection_dispatcher(void *ptr){
@@ -94,7 +112,9 @@ void GTunnel::onIncomingConnection( Socket *client ){
 					  server_tunnel;
 	Thread		  	  client_tunnel_thread( GTunnel::onTunnelingReady_dispatcher ),
 					  server_tunnel_thread( GTunnel::onTunnelingReady_dispatcher );
-		
+	
+	if( m_onincoming_connection_handler ) m_onincoming_connection_handler( client->sd() );
+	
 	if( (status = tunnel_socket.connect( tunnel_address, tunnel_port )) != NET_OK ){
 		g_log_error( "Error %d connecting to real server %s:%d !\n", status, tunnel_address, tunnel_port );
 		return;
@@ -123,11 +143,13 @@ void GTunnel::onIncomingConnection( Socket *client ){
 }
 
 void GTunnel::onTunnelingReady( Socket *source, Socket *destination ){
-	long		   bsize   = m_config.getLong( "ReadBufferSize", 0xFF );
+	long		   bsize  = m_config.getLong( "ReadBufferSize", 0xFF );
 	unsigned char *buffer = (unsigned char *)calloc( bsize, 1 );
 	int  		   read, 
 				   written, 
 				   status = NET_OK;
+	
+	if( m_ontunnelingready_handler ) m_ontunnelingready_handler( source->sd(), destination->sd() );
 	
 	g_log_debug( "Inside socket tunnel [%s-> %s] .\n", source->getAddress(), destination->getAddress() );
 	
@@ -135,8 +157,12 @@ void GTunnel::onTunnelingReady( Socket *source, Socket *destination ){
 		status = source->read( buffer, bsize, &read );
 		if( G_VALID_IO_STATUS(status) ){
 			if( read > 0 ){				
+				if( m_onincoming_payload_handler ) m_onincoming_payload_handler( source->sd(), buffer, &read );
+			
 				g_log_debug( "Tunneling %d byte(s) from %s to %s .\n", read, source->getAddress(), destination->getAddress() );
 	
+				if( m_onoutgoing_payload_handler ) m_onoutgoing_payload_handler( destination->sd(), buffer, &read );
+		
 				destination->write( buffer, read, &written );
 			}
 		}
