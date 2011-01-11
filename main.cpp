@@ -19,11 +19,9 @@
 #include "socket.h"
 #include "thread.h"
 #include "listener.h"
+#include "config.h"
 
-#define MAIN_BACKLOG	 25
-#define SERVER_ADDRESS   "www.google.com"
-#define SERVER_PORT      80
-#define READ_BUFFER_SIZE 0xFF
+#define G_VALID_IO_STATUS(s) (s == NET_OK || s == NET_MOREDATA)
 
 typedef struct {
 	Socket *source;
@@ -31,49 +29,59 @@ typedef struct {
 }
 g_socket_tunnel_t;
 
+static Configuration config;
+
 void *socket_tunnel_function(void *ptr){
 	g_socket_tunnel_t *tunnel = (g_socket_tunnel_t *)ptr;
-	unsigned char      c;
+	long			   bsize   = config.getLong( "ReadBufferSize", 0xFF );
+	unsigned char      *buffer = (unsigned char *)calloc( bsize, 1 );
 	int  			   read, 
 					   written, 
-					   status;
+					   status = NET_OK;
 	
 	g_log_debug( "Inside socket tunnel [%s-> %s] .\n", tunnel->source->getAddress(), tunnel->destination->getAddress() );
 	
-	while( tunnel->source->read( &c, 1, &read ) == NET_OK ){
-		if( read ){			
-			g_log_debug( "Tunneling %d byte from %s to %s .\n", read, tunnel->source->getAddress(), tunnel->destination->getAddress() );
-			
-			tunnel->destination->write( &c, read, &written );
+	while( G_VALID_IO_STATUS(status) ){
+		status = tunnel->source->read( buffer, bsize, &read );
+		if( G_VALID_IO_STATUS(status) ){
+			if( read > 0 ){				
+				g_log_debug( "Tunneling %d byte(s) from %s to %s .\n", read, tunnel->source->getAddress(), tunnel->destination->getAddress() );
+	
+				tunnel->destination->write( buffer, read, &written );
+			}
 		}
 	}
+	
+	free(buffer);
 	
 	return NULL;
 }
 
 void *server_acceptor(void *ptr){
-	Socket 	      server_socket;
-	Socket 	     *client  = (Socket *)ptr;
-	int			  status;
+	Socket 	       tunnel_socket;
+	Socket 	      *client  = (Socket *)ptr;
+	int			   status;
+	char		  *tunnel_address = config.get("TunnelAddress");
+	unsigned short tunnel_port	  = config.getLong("TunnelPort"); 
 	
 	g_socket_tunnel_t client_tunnel, 
 					  server_tunnel;
 	Thread		  	  client_tunnel_thread(socket_tunnel_function),
 					  server_tunnel_thread(socket_tunnel_function);
 		
-	if( (status = server_socket.connect( SERVER_ADDRESS, SERVER_PORT )) != NET_OK ){
-		g_log_error( "Error %d connecting to real server %s:%d !\n", status, SERVER_ADDRESS, SERVER_PORT );
+	if( (status = tunnel_socket.connect( tunnel_address, tunnel_port )) != NET_OK ){
+		g_log_error( "Error %d connecting to real server %s:%d !\n", status, tunnel_address, tunnel_port );
 		
 		delete client;
 		return NULL;
 	}
 	
-	g_log_info( "Created connection to %s:%d .\n", SERVER_ADDRESS, SERVER_PORT );
+	g_log_info( "Created connection to %s:%d .\n", tunnel_address, tunnel_port );
 	
 	client_tunnel.source      = client;
-	client_tunnel.destination = &server_socket;
+	client_tunnel.destination = &tunnel_socket;
 	
-	server_tunnel.source 	  = &server_socket;
+	server_tunnel.source 	  = &tunnel_socket;
 	server_tunnel.destination = client;
 	
 	client_tunnel_thread.start( &client_tunnel );
@@ -93,9 +101,17 @@ void *server_acceptor(void *ptr){
 
 int main(int argc,char **argv)
 {
-	g_init_log_level( LOG_DEBUG );
+	if( config.load( "gauntlet.conf" ) != 0 ){
+		return -1;
+	}
 	
-	Listener l( server_acceptor, 25, 10000 );
+	g_init_log_level( (g_log_level_t)config.getLong( "LogLevel", 0 ) );
+	
+	g_log_info( "Configuration succesfully loaded .\n" );
+	
+	Listener l( server_acceptor, 
+				config.getLong( "ServerBacklog" ),
+				config.getLong( "ServerPort" ) );
 	
 	l.start();
 

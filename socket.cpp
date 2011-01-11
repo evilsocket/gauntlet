@@ -173,7 +173,7 @@ net_retcode_t Socket::read( unsigned char *buffer, unsigned int size, int *pread
 	if( m_address == 0 ){
 		return NET_NOADDR;
 	}	
-	
+		
     unsigned char *pbuffer   = (unsigned char *)buffer;
     unsigned int   remaining = size,
     			   timeout   = 0,
@@ -190,7 +190,7 @@ net_retcode_t Socket::read( unsigned char *buffer, unsigned int size, int *pread
 	*pread = 0;
 
     while( remaining && !timedout && !complete ){
-        FD_ZERO( &m_fdset );
+       	FD_ZERO( &m_fdset );
         FD_SET( m_sd, &m_fdset );
         
         t.tv_sec  = timeout_sec;
@@ -208,13 +208,11 @@ net_retcode_t Socket::read( unsigned char *buffer, unsigned int size, int *pread
                     complete = ((*pread == size) ? 1 : 0);
                 }
                
-               	timeout += m_polltime;
 				if( timeout >= m_timeout ){
 					timedout = 1;
-					
 					// undefined status
 					if( complete == -1 ){
-						g_log_error( "Read timed out ([%d] %s).\n", errno, strerror(errno) );
+						g_log_error( "Read timed out ([%d] %s) .\n", errno, strerror(errno) );
 						return NET_TIMEDOUT;
 					}
 					// uncomplete request
@@ -234,7 +232,7 @@ net_retcode_t Socket::read( unsigned char *buffer, unsigned int size, int *pread
                     g_log_error( "FD not set ([%d] %s).\n", errno, strerror(errno) );
                     return NET_FAILED;
                 }
-
+				
                 read = recv( m_sd, pbuffer, remaining, 0 );
                 // client disconnection
                 if( read < 0 && (errno == EPIPE || errno == ECONNRESET) ){
@@ -254,21 +252,20 @@ net_retcode_t Socket::read( unsigned char *buffer, unsigned int size, int *pread
                 	remaining -= read;
                 	pbuffer	  += read;
                 	*pread	  += read;
-                	complete   = ((*pread == size) ? 1 : 0);
                 }	
                 // unhandled error
 				else {
 					remaining  = 0;
 					shutdown( m_sd, 0 );
 					
-					g_log_error( "Error during read operation ([%d] %s).\n", errno, strerror(errno) );
+					g_log_warning( "Error during read operation ([%d] %s).\n", errno, strerror(errno) );
 					
 					return NET_FAILED;
 				}
             break;
         }
     }
-    
+
     return NET_OK;
 }
 
@@ -311,13 +308,12 @@ net_retcode_t Socket::write( unsigned char *buffer, unsigned int size, int *pwri
                     complete = ((*pwritten == size) ? 1 : 0);
                 }
                
-               	timeout += m_polltime;
+               	timeout += 1000;
 				if( timeout >= m_timeout ){
 					timedout = 1;
-					
 					// undefined status
 					if( complete == -1 ){
-						g_log_error( "Write timed out ([%d] %s).\n", errno, strerror(errno) );
+						g_log_error( "Write timed out ([%d] %s) .\n", errno, strerror(errno) );
 						return NET_TIMEDOUT;
 					}
 					// uncomplete request
@@ -354,13 +350,12 @@ net_retcode_t Socket::write( unsigned char *buffer, unsigned int size, int *pwri
                 	remaining -= written;
                 	pbuffer	  += written;
                 	*pwritten += written;
-                	complete   = ((*pwritten == size) ? 1 : 0);
                 }
 				else {
 					remaining  = 0;
 					shutdown( m_sd, 0 );
 					
-					g_log_error( "Error during write operation ([%d] %s).\n", errno, strerror(errno) );
+					g_log_warning( "Error during write operation ([%d] %s).\n", errno, strerror(errno) );
 					
 					return NET_FAILED;
 				}

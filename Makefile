@@ -3,6 +3,7 @@ CFLAGS= -w $(INC_PATHS)
 FLAGS= -L/opt/local/lib -lpthread
 
 OBJS = log.o \
+	   config.o \
 	   socket.o \
 	   thread.o \
 	   listener.o 
